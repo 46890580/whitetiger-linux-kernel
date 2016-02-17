@@ -1,0 +1,29 @@
+Kernel driver mxs-cputemp
+=========================
+
+Supported chips:
+  * Freescale i.mx28
+    Datasheet: i.MX28 Applications Processor Reference Manual, Rev. 1, 2010
+    	       http://cache.freescale.com/files/dsp/doc/ref_manual/MCIMX28RM.pdf
+
+Author: Alexandre Belloni
+
+Description
+-----------
+This driver permits reading the internal die temperature sensor embedded inside
+Freescale i.mx28 SoCs. This sensor is read through two channels of the on chip
+Low-Resolution ADC. After calculation, the three-sigma error of the temperature
+sensor should be within ± 1.5% in degrees Kelvin. Additionally, the temperature
+sampling has a three-sigma sample-to-sample variation of 2 degrees Kelvin. If
+desired, this error can be removed by oversampling and averaging the temperature
+result.
+
+The formula is:
+	(Channel9 – Channel8) * Gain_correction/4
+
+As recommended by the datasheet, Gain_correction is equal to 1.012.
+
+sysfs entries
+-------------
+temp1_input	Measured and corrected temperature in millidegrees Celsius
+

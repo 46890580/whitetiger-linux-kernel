@@ -1,0 +1,18 @@
+mxs cputemp hwmon sensors
+-------------------------
+
+See: Documentation/hwmon/mxs-cputemp
+
+Required properties:
+- compatible: should be "fsl,mxs-internal-temp"
+- io-channels: should list the two adc channels needed to calculate the
+	       temperature
+- io-channel-names: should map the previously listed adc channels to the "min"
+		    and "max" value
+
+Example:
+	temp {
+		compatible = "fsl,mxs-internal-temp";
+		io-channels = <&lradc 8>, <&lradc 9>;
+		io-channel-names = "min", "max";
+	};
