@@ -228,7 +228,7 @@ static int mxs_spi_txrx_dma(struct mxs_spi *spi, int cs,
 
 	INIT_COMPLETION(spi->c);
 
-	ctrl0 = readl(ssp->base + HW_SSP_CTRL0);
+	ctrl0 = 0/*readl(ssp->base + HW_SSP_CTRL0)*/;
 	ctrl0 &= ~BM_SSP_CTRL0_XFER_COUNT;
 	ctrl0 |= BM_SSP_CTRL0_DATA_XFER | mxs_spi_cs_to_reg(cs);
 
