@@ -362,7 +362,7 @@
 			regulator-name = "can1-3v3";
 			regulator-min-microvolt = <3300000>;
 			regulator-max-microvolt = <3300000>;
-			gpio = <&gpio0 27 0>;
+			gpio = <&gpio2 9 0>;
 			enable-active-high;
 		};
 
