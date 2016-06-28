@@ -467,7 +467,9 @@ static void state_charging(struct mxs_info *info)
 					break;
 
 				default:
-					enter_substate(info, BAT_SUB_STATE_RAMPING);
+					newvol = PWRREG_GET_BATVOL();
+					if (newvol < 4000)
+						enter_substate(info, BAT_SUB_STATE_RAMPING);
 					break;
 			}
 			break;
@@ -506,6 +508,11 @@ static void state_charging(struct mxs_info *info)
 				/* 1st time entering this sub-state */
 				info->substate_entered = true;
 			} else {
+				batdetect_age = BATDETECT_AGE;
+				if (batdetect_age > 50000) {
+					enter_substate(info, BAT_SUB_STATE_DETECTING_BAT);
+					break;
+				}
 				/* not 1st time */
 				if (ABS_DIFF(oldvol,newvol) > DUBIOUS_VOL_DIFF) {
 					BATT_LOG("[BAT] %s dubious batvol, %d/%d\n", state_name[info->bat_state], oldvol, newvol);
@@ -522,7 +529,6 @@ static void state_charging(struct mxs_info *info)
 					chrgr_halted_count = 0;
 				}
 
-				batdetect_age = BATDETECT_AGE;
 				if (0 == chrgr_halted_count) {
 					/* hw is charging normally */
 					if (batdetect_age > BAT_DETECT_INTV_CHARGING) {
