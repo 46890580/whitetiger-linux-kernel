@@ -153,7 +153,10 @@ struct mmc_spi_host {
 	 */
 	void			*ones;
 	dma_addr_t		ones_dma;
+	struct timer_list mmc_timer;
+	struct work_struct mmc_work;
 };
+static int prev_cd = -1;
 
 
 /****************************************************************************/
@@ -173,6 +176,9 @@ mmc_spi_readbytes(struct mmc_spi_host *host, unsigned len)
 {
 	int status;
 
+	if (1 != prev_cd)
+		return -EIO;
+
 	if (len > sizeof(*host->data)) {
 		WARN_ON(1);
 		return -EIO;
@@ -185,7 +191,11 @@ mmc_spi_readbytes(struct mmc_spi_host *host, unsigned len)
 				host->data_dma, sizeof(*host->data),
 				DMA_FROM_DEVICE);
 
-	status = spi_sync_locked(host->spi, &host->readback);
+	if (1 == prev_cd) {
+		status = spi_sync_locked(host->spi, &host->readback);
+	} else {
+		status = -EIO;
+	}
 
 	if (host->dma_dev)
 		dma_sync_single_for_cpu(host->dma_dev,
@@ -453,6 +463,9 @@ mmc_spi_command_send(struct mmc_spi_host *host,
 	int			status;
 	struct spi_transfer	*t;
 
+	if (1 != prev_cd) {
+		return -EIO;
+	}
 	/* We can handle most commands (except block reads) in one full
 	 * duplex I/O operation before either starting the next transfer
 	 * (data block or command) or else deselecting the card.
@@ -544,7 +557,11 @@ mmc_spi_command_send(struct mmc_spi_host *host,
 				host->data_dma, sizeof(*host->data),
 				DMA_BIDIRECTIONAL);
 	}
-	status = spi_sync_locked(host->spi, &host->m);
+	if (1 == prev_cd) {
+		status = spi_sync_locked(host->spi, &host->m);
+	} else {
+		status = -EIO;
+	}
 
 	if (host->dma_dev)
 		dma_sync_single_for_cpu(host->dma_dev,
@@ -680,6 +697,9 @@ mmc_spi_writeblock(struct mmc_spi_host *host, struct spi_transfer *t,
 	struct scratch		*scratch = host->data;
 	u32			pattern;
 
+	if (1 != prev_cd)
+		return -EIO;
+
 	if (host->mmc->use_spi_crc)
 		scratch->crc_val = cpu_to_be16(
 				crc_itu_t(0, t->tx_buf, t->len));
@@ -688,7 +708,12 @@ mmc_spi_writeblock(struct mmc_spi_host *host, struct spi_transfer *t,
 				host->data_dma, sizeof(*scratch),
 				DMA_BIDIRECTIONAL);
 
-	status = spi_sync_locked(spi, &host->m);
+	
+	if (1 == prev_cd) {
+		status = spi_sync_locked(spi, &host->m);
+	} else {
+		status = -EIO;
+	}
 
 	if (status != 0) {
 		dev_dbg(&spi->dev, "write error (%d)\n", status);
@@ -791,6 +816,9 @@ mmc_spi_readblock(struct mmc_spi_host *host, struct spi_transfer *t,
 	unsigned int 		bitshift;
 	u8			leftover;
 
+	if (1 != prev_cd) {
+		return -EIO;
+	}
 	/* At least one SD card sends an all-zeroes byte when N(CX)
 	 * applies, before the all-ones bytes ... just cope with that.
 	 */
@@ -825,7 +853,12 @@ mmc_spi_readblock(struct mmc_spi_host *host, struct spi_transfer *t,
 				DMA_FROM_DEVICE);
 	}
 
-	status = spi_sync_locked(spi, &host->m);
+	
+	if (1 == prev_cd) {
+		status = spi_sync_locked(spi, &host->m);
+	} else {
+		status = -EIO;
+	}
 
 	if (host->dma_dev) {
 		dma_sync_single_for_cpu(host->dma_dev,
@@ -894,6 +927,10 @@ mmc_spi_data_do(struct mmc_spi_host *host, struct mmc_command *cmd,
 	int			multiple = (data->blocks > 1);
 	u32			clock_rate;
 	unsigned long		timeout;
+
+	if (1 != prev_cd) {
+		return -EIO;
+	}
 
 	if (data->flags & MMC_DATA_READ)
 		direction = DMA_FROM_DEVICE;
@@ -1021,7 +1058,12 @@ mmc_spi_data_do(struct mmc_spi_host *host, struct mmc_command *cmd,
 					host->data_dma, sizeof(*scratch),
 					DMA_BIDIRECTIONAL);
 
-		tmp = spi_sync_locked(spi, &host->m);
+		
+		if (1 == prev_cd) {
+			tmp = spi_sync_locked(spi, &host->m);
+		} else {
+			tmp = -EIO;
+		}
 
 		if (host->dma_dev)
 			dma_sync_single_for_cpu(host->dma_dev,
@@ -1345,6 +1387,29 @@ mmc_spi_detect_irq(int irq, void *mmc)
 	return IRQ_HANDLED;
 }
 
+static void mmc_work(struct work_struct *work)
+{
+	struct mmc_spi_host	*host = container_of(work, struct mmc_spi_host, mmc_work);
+	int cd;
+
+	cd = !gpio_get_value_cansleep(host->pdata->cd_gpio) ^
+		!!(host->mmc->caps2 & MMC_CAP2_CD_ACTIVE_HIGH);
+
+	if (cd != prev_cd) {
+		prev_cd = cd;
+		mmc_detect_change(host->mmc, 1);
+	}
+}
+static void mmc_timer_fun(unsigned long data)
+{
+	struct mmc_spi_host	*host = (struct mmc_spi_host *)data;
+
+	schedule_work(&host->mmc_work);
+
+	/* schedule next call to state machine */
+	mod_timer(&host->mmc_timer, jiffies + msecs_to_jiffies(100));
+
+}
 static int mmc_spi_probe(struct spi_device *spi)
 {
 	void			*ones;
@@ -1491,6 +1556,12 @@ static int mmc_spi_probe(struct spi_device *spi)
 		if (status != 0)
 			goto fail_add_host;
 	}
+	
+	init_timer(&host->mmc_timer);
+	host->mmc_timer.data = (unsigned long)host;
+	host->mmc_timer.function = mmc_timer_fun;
+
+	INIT_WORK(&(host->mmc_work), mmc_work);
 
 	if (host->pdata && host->pdata->flags & MMC_SPI_USE_RO_GPIO) {
 		has_ro = true;
@@ -1509,6 +1580,7 @@ static int mmc_spi_probe(struct spi_device *spi)
 				? "" : ", no poweroff",
 			(mmc->caps & MMC_CAP_NEEDS_POLL)
 				? ", cd polling" : "");
+	mod_timer(&host->mmc_timer, jiffies + 1);
 	return 0;
 
 fail_add_host:
