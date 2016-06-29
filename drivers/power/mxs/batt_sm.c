@@ -467,9 +467,13 @@ static void state_charging(struct mxs_info *info)
 					break;
 
 				default:
-					newvol = PWRREG_GET_BATVOL();
-					if (newvol < 4000)
+					if (IS_TESTING()) {
+						newvol = PWRREG_GET_BATVOL();
+						if (newvol < 4000)
+							enter_substate(info, BAT_SUB_STATE_RAMPING);
+					} else {
 						enter_substate(info, BAT_SUB_STATE_RAMPING);
+					}
 					break;
 			}
 			break;
@@ -508,10 +512,12 @@ static void state_charging(struct mxs_info *info)
 				/* 1st time entering this sub-state */
 				info->substate_entered = true;
 			} else {
-				batdetect_age = BATDETECT_AGE;
-				if (batdetect_age > 50000) {
-					enter_substate(info, BAT_SUB_STATE_DETECTING_BAT);
-					break;
+				if (IS_TESTING()) {
+					batdetect_age = BATDETECT_AGE;
+					if (batdetect_age > 50000) {
+						enter_substate(info, BAT_SUB_STATE_DETECTING_BAT);
+						break;
+					}
 				}
 				/* not 1st time */
 				if (ABS_DIFF(oldvol,newvol) > DUBIOUS_VOL_DIFF) {
@@ -529,6 +535,7 @@ static void state_charging(struct mxs_info *info)
 					chrgr_halted_count = 0;
 				}
 
+				batdetect_age = BATDETECT_AGE;
 				if (0 == chrgr_halted_count) {
 					/* hw is charging normally */
 					if (batdetect_age > BAT_DETECT_INTV_CHARGING) {
@@ -568,7 +575,7 @@ static void state_full(struct mxs_info *info)
 	uint16_t batvol;
 
 	batvol = PWRREG_GET_BATVOL();
-	if (batvol < 4000) {
+	if ((batvol < 4000) || IS_TESTING()) {
 		sprintf(g_reason, "batvol at %d mV", batvol);
 		enter_state(info, BAT_STAT_CHARGING, g_reason);
 	}

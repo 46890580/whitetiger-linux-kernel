@@ -18,6 +18,9 @@
 extern uint32_t batdbg;
 #define BATT_LOG(fmt, arg...)	do { if (batdbg) printk(KERN_INFO fmt , ## arg); } while (0)
 
+extern int testbat;
+#define IS_TESTING() ((testbat == 0) ? 0 : 1)
+
 
 /* DIG_CTL REGS DEFINITION */
 //#define HW_DIGCTL_MICROSECONDS	(0x000000c0)
