@@ -672,7 +672,7 @@ static void enc28j60_hw_down(struct spi_device *spi)
 
 	gpio_set_value_cansleep(rst_pin, 0);
 	devm_gpio_free(&spi->dev, rst_pin);
-	msleep(100);
+	msleep(200);
 }
 
 static void enc28j60_hw_reset(struct spi_device *spi)
@@ -692,13 +692,13 @@ static void enc28j60_hw_reset(struct spi_device *spi)
 		return;
 	}
 
-	gpio_set_value_cansleep(rst_pin, 1);
-	msleep(100);
+	//gpio_set_value_cansleep(rst_pin, 1);
+	//msleep(100);
 	gpio_set_value_cansleep(rst_pin, 0);
-	msleep(100);
+	msleep(200);
 	gpio_set_value_cansleep(rst_pin, 1);
 	devm_gpio_free(&spi->dev, rst_pin);
-	msleep(100);
+	msleep(20);
 }
 
 static int enc28j60_hw_init(struct enc28j60_net *priv)
@@ -1428,6 +1428,7 @@ static int enc28j60_net_open(struct net_device *dev)
 	 * the queueing layer of the networking.
 	 */
 	netif_start_queue(dev);
+	msleep(200);
 
 	return 0;
 }

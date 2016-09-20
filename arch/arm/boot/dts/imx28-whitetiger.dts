@@ -47,7 +47,7 @@
 					reg = <0>;
 					interrupt-parent = <&gpio3>;
 					interrupts = <29 0x2>;
-					spi-max-frequency = <6000000>;
+					spi-max-frequency = <4000000>;
 					gpios-reset = <&gpio4 20 1>;
 				};
 			};
